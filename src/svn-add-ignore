@@ -1,0 +1,46 @@
+#!/bin/perl
+
+# purpose:  add listed files to the svn ignore list
+
+use File::Basename;
+
+&main;
+
+sub main {
+    my %dirs;
+    foreach my $file (@ARGV) {
+        my $dir = &dirname($file);
+        $dir = "." unless $dir;
+        my $base = &basename($file);
+        push(@{$dirs{$dir}}, $base);
+    }
+
+    foreach my $dir (keys %dirs) {
+        unless(-d "$dir/.svn") {
+            print STDERR "$dir not under svn control\n";
+            next;
+        }
+
+        &addIgnores($dir, @{$dirs{$dir}});
+    }
+}
+
+sub addIgnores {
+    my $dir = shift;
+    my @dirs = @_;
+
+    if(@dirs) {
+        my $prop = `svn propget svn:ignore "$dir"`;
+        $prop =~ s/[\n\r]*$/\n/;
+
+        foreach my $entry (@dirs) {
+            next if $prop =~ /^$entry$/m;
+            $prop .= "$entry\n";
+        }
+
+        return !system("svn propset svn:ignore \"$prop\" \"$dir\"");
+    }
+
+    return 1;
+}
+
