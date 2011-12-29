@@ -1,0 +1,36 @@
+#!/usr/bin/perl
+
+# purpose: clean up the current directory (and below) such that all
+# files are just like they'd be checked out of SVN 
+
+
+&main;
+
+sub main {
+    open(SVN, "svn stat |") || die("couldn't run svn:  $!");
+    my @updateList;
+    my @revertList;
+
+    while(<SVN>) {
+        chop;
+        my ($flags, $file) = split(/\s+/, $_, 2);
+
+        if($flags eq "?") { 
+            unlink $file;
+        }
+        elsif($flags eq "!") { 
+            push(@updateList, $file);
+        }
+        elsif($flags eq "M") { 
+            push(@revertList, $file);
+        }
+        else {
+            die("Unknown flag for file $file");
+        }
+    }
+
+    close(SVN);
+
+    !system("svn update @updateList") || die("Failed to update files");
+    !system("svn revert @revertList") || die("Failed to revert files");
+} 

@@ -1,0 +1,250 @@
+#!/bin/bash
+
+# purpose:  Be a merge specific shell
+
+usage() {
+    cat <<EOF
+usage: $0 URL
+
+where URL is the URL for the merge source.
+The CWD should contain a checkout into which we are going to merge.
+EOF
+}
+# help:Selecting changesets
+# help:    e - show and record list of changesets eligible to merge.  
+# help:        Also resets merge candidate to the first eligible changeset
+e() {
+export revs=`svn mergeinfo --show-revs eligible $mergeSource`
+revisions=($revs)
+count=`echo $revs | wc -w`
+
+echo "$count revisions eligible for merge:"
+echo $revs
+}
+
+# help:    n - go to next merge candidate
+n() {
+    currentRevision=${revisions[0]}
+    if [ -z "$currentRevision" ] ; then
+	echo 'Nothing to merge'
+	return
+    fi
+    unset revisions[0]
+    revisions=("${revisions[@]}")
+    PS1="merge [$currentRevision]> "
+    svn log -$currentRevision $mergeSource > $revisionLog
+    svn log -v -$currentRevision $mergeSource > $revisionLog.verbose
+    logv
+}
+
+# help:
+# help:Merging
+# help:    dr - merge dry run
+dr() {
+    m --dry-run
+}
+
+# help:    mm - mark the current changeset as merged without actually merging
+mm() {
+    echo "Marking $currentRevision merged without merging"
+    m --record-only
+}
+
+# help:    m - merge the current change set
+m() {
+    svn merge -`echo $currentRevision | sed -e s/r/c/` $* $mergeSource
+}
+
+# help:    mnw - merge the current change set, ignoring whitespace
+mnw() {
+    m -x -b
+}
+
+# help:    patchset -- create and store a patch set representing 
+# help:                the current candidate changeset
+patchset() {
+    svn diff -x -u -`echo $currentRevision | sed -e s/r/c/` $mergeSource > $scratchdir/patch
+    echo "Patch set created in $scratchdir/patch.  Use applypatch to apply it"
+}
+
+# help:    applypatch -- apply the current patchset.  Can be used 
+# help:                  from any directory
+applypatch() {
+    patch "$@" < $scratchdir/patch
+}
+
+
+# help:
+# help:Status
+# help:    c|conflicts - show conflicts
+c() { 
+conflicts 
+}
+
+conflicts() {
+    svn stat | egrep '^C' | awk '{print $2}'
+}
+
+# help:    s|sta -- show svn status
+s() {
+sta
+}
+
+sta() {
+    svn stat
+}
+
+# help:    d|dif -- subversion diff
+d() {
+dif
+}
+
+dif() {
+    svn diff
+}
+
+# help:    sp [FILE*]-- show the patch set we're trying to apply
+sp() {
+    {
+    if [ -n "$*" ] ; then
+	for f in "$@"; do
+            svn diff -`echo $currentRevision | sed -e s/r/c/` $mergeSource/$f
+	done
+    else
+        svn diff -`echo $currentRevision | sed -e s/r/c/` $mergeSource
+    fi
+    } | more
+}
+
+# help:    l|logv -- show verbose log
+l() {
+    logv
+}
+
+# help:    log -- show the candidate commit message
+log() {
+    cat $revisionLog
+}
+
+logv() {
+    cat $revisionLog.verbose
+}
+
+# help:
+# help:Committing/Updating
+# help:    commit [MESSAGE] - commit the current state.  If MESSAGE is
+# help:                       given, it will be the commit message.
+# help:                       If no MESSAGE is given, will commit with
+# help:                       the message from the current changeset
+# help:    r|resolve -- mark a file resolved (auto-completes)
+r() {
+    resolve "$@"
+}
+
+resolve() {
+    svn resolved "$@"
+}
+
+complete -C conflicts resolve
+complete -C conflicts r
+
+commit() {
+    if [ -n "$*" ] ; then
+	echo "$*" > $revisionLog.commit
+    else
+	(
+	    echo "Merged from $mergeSource $currentRevision" 
+	    cat $revisionLog | head -n -1  | tail -n +4 
+	) > $revisionLog.commit
+    fi
+    svn commit -F "$revisionLog.commit" && {
+	unset $currentRevision
+	PS1="nothing left to merge$ "
+	n
+    }
+}
+
+
+# help:    up -- subversion update
+up() {
+    svn up
+}
+
+
+# help:
+# help:Rejecting
+# help:    discard [FILE*]- revert the current sandbox
+discard() {
+    if [ -n "$*" ] ; then
+	svn revert -R "$@"
+    else
+	svn revert -R .
+    fi
+}
+
+# help:    clean -- remove all files which subversion does not recognize
+clean() {
+    svn stat | awk 'BEGIN {ORS="\0"} $1=="?"{print $2}' | xargs -r0 rm -rf 
+}
+
+
+# help:
+# help:Other
+# help:    help - this list
+help() {
+    awk -F: '/^# help/{print $2}' $helpSource 
+}
+
+# help:    quit -- exit the merge bench
+
+quit() {
+    exit
+}
+
+checkargs() {
+if [ -z "$1" ] ; then
+    echo "Missing URL"
+   usage;
+   exit 1
+fi
+
+if [ ! -d .svn ] ; then
+    echo "Not a subversion sandbox"
+    usage
+    exit 1
+fi
+}
+
+main() {
+    export mergeSource="$1"
+    export helpSource="$0"
+    bash --init-file $0
+}
+
+cdto() {
+    pushd "$@"
+}
+
+cdtofile() {
+    file=`find . -name "$@"`
+    if [ -n $file ] ; then
+	pushd `dirname $file`
+    fi
+}
+
+
+if [ "$0" != "bash" ] ; then
+    main "$@"
+    exit $?
+fi
+
+declare -a revisions
+PS1="merge$ "
+scratchdir=/tmp/mergebench.$$
+mkdir $scratchdir
+revisionLog=$scratchdir/revisionlog
+trap "rm -rf $scratchdir" 0
+help
+e
+n
+
