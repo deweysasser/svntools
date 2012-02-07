@@ -60,6 +60,41 @@ mnw() {
     m -x -b
 }
 
+# help:    automerge - perform a merge/commit cycle until something fails
+automerge() {
+    while true; do 
+	echo -n "Merging $currentRevision..."
+	m > $scratchdir/automerge
+	if [ $? -gt 0 ] ; then
+	    echo "merge FAILED"
+	    cat $scratchdir/automerge
+	    rm -f $scratchdir/automerge
+	    return 1
+	else
+	    echo -n "merged..."
+	fi
+
+	if commit > $scratchdir/automerge.commit;  then
+	    rm -f $scratchdir/automerge.commit
+	    echo "committed"
+	else
+	    echo "commit FAILED"
+	    cat $scratchdir/automerge.commit
+	    rm -f $scratchdir/automerge.commit
+	    return 1
+	fi
+    done
+
+    if [ $? -gt 0 ] ; then
+	echo "Merge failed"
+	rm -f $scratchdir/automerge
+	return 1
+    fi
+
+    rm -f $scratchdir/automerge
+    return 0
+}
+
 # help:    patchset -- create and store a patch set representing 
 # help:                the current candidate changeset
 patchset() {
