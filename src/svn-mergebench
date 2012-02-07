@@ -20,6 +20,8 @@ count=`echo $revs | wc -w`
 
 echo "$count revisions eligible for merge:"
 echo $revs
+currentRevision="no current revision"
+PS1="merge [$currentRevision]> "
 }
 
 # help:    n - go to next merge candidate
