@@ -153,7 +153,10 @@ commit() {
 	echo "$*" > $revisionLog.commit
     else
 	(
-	    echo "Merged from $mergeSource $currentRevision" 
+	    author=`authorinfo`
+	    echo "Merged from $mergeSource $currentRevision"
+	    echo "originally by $author" 
+	    echo ""
 	    cat $revisionLog | head -n -1  | tail -n +4 
 	) > $revisionLog.commit
     fi
@@ -164,6 +167,9 @@ commit() {
     }
 }
 
+authorinfo() {
+    head -n 2 $revisionLog | perl -n -e 'if (/^r/) { @f=split(/ *\| */), print "$f[1] $f[2]\n" }'
+}
 
 # help:    up -- subversion update
 up() {
