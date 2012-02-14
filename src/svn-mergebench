@@ -20,16 +20,17 @@ count=`echo $revs | wc -w`
 
 echo "$count revisions eligible for merge:"
 echo $revs
-currentRevision="no current revision"
-PS1="merge [$currentRevision]> "
+currentRevision=""
+PS1="merge [no current revision]> "
 }
 
 # help:    n - go to next merge candidate
 n() {
     currentRevision=${revisions[0]}
     if [ -z "$currentRevision" ] ; then
+	currentRevision=""
 	echo 'Nothing to merge'
-	return
+	return 
     fi
     unset revisions[0]
     revisions=("${revisions[@]}")
@@ -64,7 +65,7 @@ mnw() {
 
 # help:    automerge - perform a merge/commit cycle until something fails
 automerge() {
-    while true; do 
+    while [ -n "$currentRevision" ]; do 
 	echo -n "Merging $currentRevision..."
 	m > $scratchdir/automerge
 	if [ $? -gt 0 ] ; then
