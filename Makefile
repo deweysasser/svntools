@@ -1,15 +1,16 @@
-DESTDIR=/usr
+DESTDIR=/
+PREFIX=${DESTDIR}/usr
 INSTALL=/usr/bin/install
 
 build:
 	-echo > /dev/null
 
 install:
-	mkdir -p ${DESTDIR}/bin
-	${INSTALL} -m 755 -o root src/svn-* ${DESTDIR}/bin
+	mkdir -p ${PREFIX}/bin
+	${INSTALL} -m 755 -o root src/svn-* ${PREFIX}/bin
 
 deb:
-	dpkg-buildpackage -rfakeroot
+	dpkg-buildpackage -rfakeroot -us -b -uc
 	lintian ../svntools_*.deb
 
 clean:
