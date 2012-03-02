@@ -1,0 +1,18 @@
+Source: svntools
+Section: vcs
+Priority: extra
+Maintainer: Dewey Sasser <dewey@sasser.com>
+Build-Depends: debhelper (>= 7.0.50~)
+Standards-Version: 3.8.4
+Homepage: http://deweysasser.com/software/svntools
+#Vcs-Git: git://git.debian.org/collab-maint/svntools.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/svntools.git;a=summary
+
+Package: svntools
+Architecture: all
+Depends: ${misc:Depends}, subversion, perl
+Description: Additional subversion command line tools
+ Command line tools which assist with working with subversion
+ including merges, resetting the sandbox and dealing with ignored
+ files
+
