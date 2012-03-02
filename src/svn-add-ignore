@@ -1,4 +1,4 @@
-#!/bin/perl
+#!/usr/bin/perl
 
 # purpose:  add listed files to the svn ignore list
 
