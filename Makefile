@@ -14,5 +14,6 @@ deb:
 	lintian ../svntools_*.deb
 
 clean:
-	-echo > /dev/null
+	rm -rf debian/svntools
+
 
