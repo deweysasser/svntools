@@ -13,6 +13,10 @@ deb:
 	dpkg-buildpackage -rfakeroot -us -b -uc
 	lintian ../svntools_*.deb
 
+signed-deb:
+	dpkg-buildpackage -rfakeroot 
+	lintian ../svntools_*.deb
+
 clean:
 	rm -rf debian/svntools
 
