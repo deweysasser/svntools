@@ -21,9 +21,7 @@ SVNPATH, optionally using SANDBOXDIR as the SVN checkout area if given.
 
 =item -sandbox
 
-Specify a directory which holds the SVN checkout area.  If this does
-not exist it will be created.  If it exists it must hold an SVN
-sandbox.
+Specify a directory which holds the SVN checkout area.  If this does not exist it will be created.  If it exists it must hold an SVN sandbox.
 
 If not specified, a temporary directory will be used.
 
@@ -34,13 +32,6 @@ Directory to mirror into SVN
 =item -repo URL
 
 URL of the SVN area into which to mirror
-
-=item -exclude PATH|REGEXP
-
-Exclude the given item from the SVN commit.  This argument is passed
-directly to rsync and thus obeys rsync conventions.  Please see the
-rsync man page for details there, but the short form is the path
-should be specified relative to SRCDIR.
 
 =item -debug
 
@@ -177,11 +168,11 @@ sub copyFiles {
     # at this point we should know what we have to do
 
     if(@missing) {
-        &run("svn rm -q @missing") || die("Failed to remove files: $!");
+        &xargs("svn rm -q", @missing) || die("Failed to remove files: $!");
     }
 
     if(@new) {
-        &run ("svn add -q @new") || die("Failed to add files: $!");
+        &xargs ("svn add -q",  @new) || die("Failed to add files: $!");
     }
 
     return $returnValue;
@@ -247,6 +238,24 @@ sub usageFatal {
 sub run {
   &debug(@_);
   return !system(@_) unless $Config{noexec};
+}
+
+sub xargs {
+    my $cmd = shift;
+
+    return unless @_;
+
+    &debug("Running '$cmd' on a bunch of files");
+
+    while(@_) {
+	my @set=@_[0..99];
+
+	&run("$cmd @set") || die("running failed:  $cmd @set: $!");
+
+	@_ = @_[100..$#_];
+    }
+    
+    return 1;
 }
 
 sub help {
