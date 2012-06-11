@@ -1,0 +1,281 @@
+#!/usr/bin/perl
+
+# TODO:  make this *not* require a repo, so it can just require a sandbox
+
+=head1 NAME
+
+B<svn-mirror> -- Mirror a directory into an svn repository
+
+=head1 SYNOPSIS
+
+B<svn-mirror>  [-debug] [-noexec] [-man] [-help] (-sandbox SANDBOXDIR | -repo URL) -dir SRCDIR 
+
+=head1 DESCRIPTION
+
+Mirrors the directory given in SRCDIR into a SVN repostiory at
+SVNPATH, optionally using SANDBOXDIR as the SVN checkout area if given.
+
+=head1 OPTIONS
+
+=over
+
+=item -sandbox
+
+Specify a directory which holds the SVN checkout area.  If this does
+not exist it will be created.  If it exists it must hold an SVN
+sandbox.
+
+If not specified, a temporary directory will be used.
+
+=item -dir SRCDIR
+
+Directory to mirror into SVN
+
+=item -repo URL
+
+URL of the SVN area into which to mirror
+
+=item -exclude PATH|REGEXP
+
+Exclude the given item from the SVN commit.  This argument is passed
+directly to rsync and thus obeys rsync conventions.  Please see the
+rsync man page for details there, but the short form is the path
+should be specified relative to SRCDIR.
+
+=item -debug
+
+Turn on debugging output
+
+=item -noexec
+
+Do not execute state changing commands
+
+=item -man
+
+Show this page
+
+=item -help
+
+Show a brief summary of options
+
+=back
+
+=cut
+
+use strict;
+use vars qw( %Config );
+
+use Pod::Usage;
+use Getopt::Long;
+
+unless (GetOptions(
+            "dir=s" => \$Config{directory},
+            "repo=s" => \$Config{repo},
+            "user=s" => \$Config{username},
+            "pass=s" => \$Config{password},
+            "message=s" => \$Config{message},
+            "sandbox=s" =>\$Config{sandbox},
+            "exclude=s@" =>\$Config{exclude},
+            "debug" => \$Config{debug},
+            "noexec" => \$Config{noexec},
+            "man" => \$Config{man},
+            "help" => \$Config{help},
+        )) {
+    &usage;
+    exit 1; # unreachable
+}
+
+&help if $Config{help};
+&man if $Config{man};
+
+&usageFatal("Missing -dir") unless $Config{directory};
+
+&usageFatal("Must specifiy either existing sandbox or repository") unless ($Config{repo} || -d "$Config{sandbox}/.svn");
+
+&main;
+
+sub main {
+
+    my $dir = $Config{directory};
+    &fatal("INTERNAL ERROR:  missing dir") unless $dir;
+    my $repo = $Config{repo};
+    my $message = $Config{message};
+
+    $message = "Periodic Check In" unless $message;
+
+    my $sandbox = $Config{sandbox};
+
+    my $removeSandboxWhenDone = 0;
+
+    unless($sandbox) {
+        $sandbox = "/tmp/checkin-sandbox.$$";
+        $removeSandboxWhenDone = 1;
+    }
+
+    &checkoutFiles($repo, $sandbox);
+    if(&copyFiles($dir, $sandbox)) {
+        # only checks in if 'svn stat' says something changed
+        &checkinFiles($sandbox, $message);
+    }
+
+    &rmdir($sandbox) if $removeSandboxWhenDone;
+}
+
+sub checkinFiles {
+    my $dir = shift;
+    my $message = shift;
+
+    return &run("svn ci -q -m '$message' $dir");
+}
+
+# returns:  1 if there are changes, 0 otherwise
+sub copyFiles {
+    my $srcdir = shift;
+    my $svndir = shift;
+
+    my @exclude;
+    my $excludeOptions;
+
+    if($Config{exclude}) {
+        @exclude = @{$Config{exclude}};
+        &debug("Excluding @exclude");
+        $excludeOptions = "--exclude '" . join("' --exclude '", @exclude) . "'";
+    }
+
+    &debug("Exclude Option is: $excludeOptions");
+
+
+    &run("rsync -C -r --delete $excludeOptions $srcdir/ $svndir/") || die("Failed to run rsync: $!");
+
+    my $statHandle;
+
+    open($statHandle, "svn stat $svndir/|") || die("Failed to svn stat $svndir: $!");
+
+    my @missing;
+    my @new;
+
+    my $returnValue=0;
+
+    while(<$statHandle>) {
+        $returnValue=1;
+        chop;
+
+        if(/^!\s+(.*)/) {
+            push(@missing, "'$1'");
+        }
+        elsif(/^\?\s+(.*)/) {
+            push(@new, "'$1'");
+        }
+        elsif (/^[M].*/) {
+            # Do nothing -- we understand this status
+        }
+        else {
+            die("Don't understand status line '$_'");
+        }
+    }
+
+    # at this point we should know what we have to do
+
+    if(@missing) {
+        &run("svn rm -q @missing") || die("Failed to remove files: $!");
+    }
+
+    if(@new) {
+        &run ("svn add -q @new") || die("Failed to add files: $!");
+    }
+
+    return $returnValue;
+}
+
+sub checkoutFiles {
+    my $repo = shift;
+    my $dir = shift;
+
+    # if it doesn't exist
+    unless ( -d $dir ) {
+        &requireRepo($repo);
+        &run("svn co -q '$repo' '$dir'")  || die("Failed to check out $repo to $dir: $!");
+        return 1;
+    }
+    
+    unless ( -d "$dir/.svn" ) { 
+        die("$dir exists, but does not contain an SVN checkout");
+    }
+
+    # TODO:  put other sanity checks here
+
+    # TODO:  check the results of svn update to make sure there are no conflicts, etc
+    if(&run("svn update -q '$dir'")) {
+        return 1;
+    }
+    else {
+        &requireRepo($repo);
+        &info("svn update failed.  Removing $dir and creating anew");
+        &run("svn co -q '$repo' '$dir'") || die("Failed to check out $repo to $dir: $!")
+    }
+}
+
+sub requireRepo {
+    my $repo = shift;
+
+    return 1 if $repo;
+
+    die("Cannot perform requested operation without existing sandbox dir or a specified repository");
+}
+
+sub debug {
+    return unless $Config{debug};
+
+    print STDERR "@_\n";
+}
+
+sub error {
+    print STDERR "@_\n";
+}
+
+sub fatal {
+    print STDERR "@_\n";
+    exit 1;
+}
+
+sub usageFatal {
+    print STDERR "@_\n";
+    &usage;
+    exit 1;
+}
+
+sub run {
+  &debug(@_);
+  return !system(@_) unless $Config{noexec};
+}
+
+sub help {
+    pod2usage( -exitval => 0, -verbose=>1);
+}
+
+sub man {
+    pod2usage( -exitval => 0, -verbose=>2);
+}
+
+sub usage {
+    pod2usage( -exitstatus => 1);
+}
+
+=pod 
+
+=head1 EXAMPLES
+
+=head1 FILES
+
+=head1 ENVIRONMENT
+
+=head1 BUGS AND CAVEATS
+
+=head1 SEE ALSO
+
+=head1 AUTHOR
+
+Dewey Sasser <Dewey.Sasser@ascential.com>
+
+
+
